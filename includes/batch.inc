@@ -301,7 +301,7 @@ function _drush_batch_worker() {
 
     // If we are in progressive mode, break processing after 60% of memory usage
     // is reached.
-    if (drush_memory_limit() > 0 && (memory_get_usage() * 1.6) >= drush_memory_limit()) {
+    if (!$break && drush_memory_limit() > 0 && (memory_get_usage() * 1.6) >= drush_memory_limit()) {
       Drush::logger()->notice(dt("Batch process has consumed in excess of 60% of available memory. Starting new thread"));
       $break = TRUE;
     }
