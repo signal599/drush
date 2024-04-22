@@ -152,6 +152,8 @@ function _drush_backend_batch_process($command = 'batch-process', $args = [], $o
       $process->setTimeout(null);
       // Suppress printing stdout since a JSON array is returned to us here.
       $process->run($process->showRealtime()->hideStdout());
+      // Keep parent process connection alive.
+      \Drupal::database()->query('SELECT 1');
       $result = $process->getOutputAsJson();
       $finished = !$process->isSuccessful() || (isset($result['drush_batch_process_finished']) && $result['drush_batch_process_finished'] === TRUE);
     }
