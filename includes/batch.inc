@@ -152,6 +152,8 @@ function _drush_backend_batch_process($command = 'batch-process', $args = [], $o
       $process->setTimeout(null);
       // Suppress printing stdout since a JSON array is returned to us here.
       $process->run($process->showRealtime()->hideStdout());
+      // Keep parent process connection alive.
+      \Drupal::database()->query('SELECT 1');
       $result = $process->getOutputAsJson();
       $finished = !$process->isSuccessful() || (isset($result['drush_batch_process_finished']) && $result['drush_batch_process_finished'] === TRUE);
     }
@@ -222,8 +224,9 @@ function _drush_batch_worker() {
   $current_set = &_batch_current_set();
   $set_changed = TRUE;
 
+  $process_start = microtime(TRUE);
   if (empty($current_set['start'])) {
-    $current_set['start'] = microtime(TRUE);
+    $current_set['start'] = $process_start;
   }
   $queue = _batch_queue($current_set);
   while (!$current_set['success']) {
@@ -288,12 +291,24 @@ function _drush_batch_worker() {
     // processed or all sets have been completed.
     $queue = _batch_queue($current_set);
 
+    $break = FALSE;
+    $now = microtime(TRUE);
+
+    if (!empty($current_set['max_process_time']) && (($now - $process_start) > $current_set['max_process_time'])) {
+      Drush::logger()->notice(dt('Thread has run for maximum time. Starting new thread'));
+      $break = TRUE;
+    }
+
     // If we are in progressive mode, break processing after 60% of memory usage
     // is reached.
-    if (drush_memory_limit() > 0 && (memory_get_usage() * 1.6) >= drush_memory_limit()) {
+    if (!$break && drush_memory_limit() > 0 && (memory_get_usage() * 1.6) >= drush_memory_limit()) {
       Drush::logger()->notice(dt("Batch process has consumed in excess of 60% of available memory. Starting new thread"));
+      $break = TRUE;
+    }
+
+    if ($break) {
       // Record elapsed wall clock time.
-      $current_set['elapsed'] = round((microtime(TRUE) - $current_set['start']) * 1000, 2);
+      $current_set['elapsed'] = round(($now - $current_set['start']) * 1000, 2);
       break;
     }
   }
